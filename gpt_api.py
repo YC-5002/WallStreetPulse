@@ -12,7 +12,7 @@ import time
 
 # https://platform.openai.com/api-keys
 api_base = "https://api.openai.com/v1"
-with open('../../../Downloads/WallStreetPulse-main 2/apikey.txt', 'r') as f:
+with open('apikey.txt', 'r') as f:
     api_key = f.read()
 
 # Types of model to be used, can be found at https://platform.openai.com/docs/models/overview
@@ -73,6 +73,3 @@ def get_response(query, chat_history=[]):
     chat_history.append((query, answer['answer']))
 
     return answer, chat_history
-
-
-

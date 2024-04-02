@@ -15,6 +15,7 @@ reddit = praw.Reddit(
     user_agent="testscript by u/fakebot3",
 )
 
+
 class Reddit_Posts:
     def __init__(self, num_posts=10, subreddit_name="wallstreetbets"):
         posts = reddit.subreddit(subreddit_name).hot(limit=num_posts)
@@ -31,37 +32,7 @@ class Reddit_Posts:
     #   n: the number of the post
     # return: the author name of the n-th post
     # String
-    def get_author(self, n):
-        return self.posts[n].author
-    
-    def get_user_post_frequency(self, username, time_frame_days):
-        # Calculate the timestamp for the specified time frame
-        timestamp_limit = datetime.utcnow() - timedelta(days=time_frame_days)
-        timestamp = int(timestamp_limit.timestamp())
 
-        # Extract the authors from the posts using the get_author method and filter by time frame
-        posts_within_time_frame = [post for post in self.posts if
-                                   post.created_utc > timestamp and post.author and post.author.name == username]
-
-        # Count the frequency of posts for the specified user
-        user_frequency = len(posts_within_time_frame)
-
-        return user_frequency
-    
-    def get_all_authors_post_frequency(self, time_frame_days):
-        # Calculate the timestamp for the specified time frame
-        timestamp_limit = datetime.utcnow() - timedelta(days=time_frame_days)
-        timestamp = int(timestamp_limit.timestamp())
-
-        # Extract the authors from the posts using the get_author method and filter by time frame
-        authors = [post.author.name for post in self.posts if
-                   post.created_utc > timestamp and post.author is not None]
-
-        # Count the frequency of posts for each author
-        author_frequency = Counter(authors)
-
-        return dict(author_frequency)
-    
     ### Updated Method ###
     # Calculate the post frequency, average upvotes per post, upvote to downvote ratio per post,
     # and average comments per post for each unique author in the specified time frame
@@ -87,7 +58,7 @@ class Reddit_Posts:
         author_average_upvotes = {author: (upvotes / frequency) if frequency > 0 else 0
                                   for author, frequency in author_frequency.items()
                                   for upvotes in [author_upvotes[author]]}
-        
+
         author_upvote_to_downvote_ratio = {author: (upvotes / max(downvotes, 1))  # Avoid division by zero
                                            for author, upvotes in author_upvotes.items()
                                            for downvotes in [author_downvotes[author]]}
@@ -96,7 +67,7 @@ class Reddit_Posts:
                                    for author, frequency in author_frequency.items()
                                    for comments in [author_comments[author]]}
 
-        return dict(author_frequency), author_average_upvotes, author_upvote_to_downvote_ratio, author_average_comments
+        return dict(author_frequency), author_average_upvotes, author_upvote_to_downvote_ratio, author_average_comments,
 
     weights = {
         'frequency': 0.2,
@@ -105,7 +76,8 @@ class Reddit_Posts:
         'comments': 0.1
     }
 
-    def calculate_author_scores(self, authors_frequency, authors_average_upvotes, authors_upvote_to_downvote_ratio, authors_average_comments):
+    def calculate_author_scores(self, authors_frequency, authors_average_upvotes, authors_upvote_to_downvote_ratio,
+                                authors_average_comments):
         author_scores = {}
 
         for author in authors_frequency.keys():
@@ -122,13 +94,15 @@ class Reddit_Posts:
             author_scores[author] = total_score
 
         return author_scores
-    
+
     def get_top_authors_info(self, time_frame_days, num_comments):
-    # Get post statistics and author scores
-        authors_frequency, authors_average_upvotes, authors_upvote_to_downvote_ratio, authors_average_comments = self.get_all_authors_post_stats(time_frame_days)
+        # Get post statistics and author scores
+        authors_frequency, authors_average_upvotes, authors_upvote_to_downvote_ratio, authors_average_comments = self.get_all_authors_post_stats(
+            time_frame_days)
 
         # Calculate author scores
-        author_scores = self.calculate_author_scores(authors_frequency, authors_average_upvotes, authors_upvote_to_downvote_ratio, authors_average_comments)
+        author_scores = self.calculate_author_scores(authors_frequency, authors_average_upvotes,
+                                                     authors_upvote_to_downvote_ratio, authors_average_comments)
 
         # Sort authors based on their scores (descending order)
         sorted_authors = sorted(author_scores.items(), key=lambda x: x[1], reverse=True)
@@ -138,12 +112,15 @@ class Reddit_Posts:
 
         # Gather information for each top author
         author_info = []
+
         for author, _ in top_authors:
             # Get titles, content, comments, and replies
             posts_info = []
             for post_index in range(len(self.posts)):
                 title = self.get_title(post_index)
                 content = self.get_content(post_index)
+                upvotes = self.get_upvotes(post_index)
+                downvotes = self.get_downvotes(post_index)
                 author_name = self.get_author(post_index)  # Get the author name for the current post
                 comments = self.get_comments(post_index, num_comments)
                 comment_data = []
@@ -159,19 +136,64 @@ class Reddit_Posts:
                     'title': title,
                     'content': content,
                     'author': author_name,  # Store the author name for the current post
-                    'comments': comment_data
+                    'comments': comment_data,
+                    'upvotes': upvotes,
+                    'downvotes': downvotes
                 })
 
             # Store the information in a dictionary
             author_info.append({
                 'author': author,
                 'posts': posts_info
+
             })
 
         return author_info
-    
-    
-    
+
+    def getGPTString(self, author_info):
+
+        gpt_strings = []  # List to store the GPT strings for each post
+
+        for author_post in author_info:
+            author = author_post['author']
+            posts = author_post['posts']
+
+            for post_info in posts:
+                title = post_info['title']
+                content = post_info['content']
+                author_name = post_info['author']
+                upvotes = post_info['upvotes']
+                downvotes = post_info['downvotes']
+
+                gpt_string = f"Post Title: {title}\n"
+                gpt_string += f"  Post Content: {content}\n"
+                gpt_string += f"  Post Author: {author_name}\n"
+                gpt_string += f"  Post Upvotes: {upvotes}\n"
+                gpt_string += f"  Post Downvotes: {downvotes}\n"
+
+                # Add comments and replies
+                for comment_data in post_info['comments']:
+                    comment_author = comment_data['author']
+                    comment_content = comment_data['content']
+                    comment_upvotes = comment_data['upvotes']
+                    comment_downvotes = comment_data['downvotes']
+
+                    gpt_string += f"    Comment by {comment_author}: {comment_content}\n"
+                    gpt_string += f"    Comment Upvotes: {comment_upvotes}\n"
+                    gpt_string += f"    Comment Downvotes: {comment_downvotes}\n"
+
+                    # Add replies
+                    for reply in comment_data['replies']:
+                        reply_author = reply['author']
+                        reply_content = reply['content']
+
+                        gpt_string += f"      Reply by {reply_author}: {reply_content}\n"
+
+                # Add the constructed string to the list
+                gpt_strings.append(gpt_string)
+
+        return gpt_strings
+
     ### Specification ###
     # inputs:
     #   n: the number of the post
@@ -180,6 +202,9 @@ class Reddit_Posts:
     def get_title(self, n):
         return self.posts[n].title
 
+    def get_author(self, n):
+        return self.posts[n].author
+
     ### Specification ###
     # inputs:
     #   n: the number of the post
@@ -187,7 +212,7 @@ class Reddit_Posts:
     # String
     def get_content(self, n):
         post = self.posts[n]
-    # Check if the post is a text post
+        # Check if the post is a text post
         if post.is_self:
             return post.selftext
         # Check if the post is an image post
@@ -252,7 +277,7 @@ class Reddit_Posts:
             comment_data.append(comment_info)
 
         return comment_data
-    
+
     def get_comment_replies(self, comment, num_replies):
         comment.replies.replace_more(limit=0)
         replies = comment.replies.list()[:num_replies]
